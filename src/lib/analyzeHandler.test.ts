@@ -3,14 +3,6 @@ import { handleAnalyze } from "./analyzeHandler";
 import type { CollectPagesResult } from "./collect";
 
 describe("handleAnalyze", () => {
-  const dummyCollect = vi.fn().mockResolvedValue({
-    status: "ok",
-    pages: [
-      { type: "home", url: "https://iana.org/", text: "Hello from IANA" },
-      { type: "about", url: "https://iana.org/about", text: "About page text" },
-    ],
-    skipped: [{ type: "pricing", code: "NOT_FOUND" }],
-  } as CollectPagesResult);
 
   function createRequest(body: unknown, headers?: Record<string, string>): Request {
     return new Request("http://localhost:3000/api/analyze", {
@@ -84,29 +76,50 @@ describe("handleAnalyze", () => {
     expect(json).toEqual({ error: "NOT_ALLOWLISTED" });
   });
 
-  it("returns FetchSummary on valid request without exposing page text", async () => {
+  it("returns AnalyzeResponse on valid request with evidence and score without exposing full page text", async () => {
+    const dummyCollectWithMatch = vi.fn().mockResolvedValue({
+      status: "ok",
+      pages: [
+        {
+          type: "home",
+          url: "https://iana.org/",
+          // Synthetic test text for B2B SaaS platform
+          text: "Acme platform provides enterprise workflow software for modern business teams worldwide.",
+        },
+        { type: "about", url: "https://iana.org/about", text: "About page text" },
+      ],
+      skipped: [{ type: "pricing", code: "NOT_FOUND" }],
+    } as CollectPagesResult);
+
     const req = createRequest({ domain: "https://iana.org/path" });
     const res = await handleAnalyze(req, {
-      collectPages: dummyCollect,
+      collectPages: dummyCollectWithMatch,
       env: { ALLOWED_DOMAINS_ONLY: "false" },
     });
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual({
-      domain: "iana.org",
-      status: "ok",
-      pages: [
-        { type: "home", url: "https://iana.org/", chars: 15 },
-        { type: "about", url: "https://iana.org/about", chars: 15 },
-      ],
-      skipped: [{ type: "pricing", code: "NOT_FOUND" }],
-    });
-    // Ensure raw text is never exposed
-    expect(JSON.stringify(json)).not.toContain("Hello from IANA");
+    expect(json.domain).toBe("iana.org");
+    expect(json.status).toBe("ok");
+    expect(json.mode).toBe("rules");
+    expect(json.profileLabel).toBeDefined();
+    expect(Array.isArray(json.evidence)).toBe(true);
+    expect(json.evidence.length).toBe(5);
+    expect(Array.isArray(json.redFlags)).toBe(true);
+    expect(json.score).toBeDefined();
+    expect(json.score.totalCriteria).toBe(5);
+    expect(json.score.confirmed).toBeGreaterThan(0);
+    expect(json.pages).toEqual([
+      { type: "home", url: "https://iana.org/", chars: 88 },
+      { type: "about", url: "https://iana.org/about", chars: 15 },
+    ]);
+    expect(json.skipped).toEqual([{ type: "pricing", code: "NOT_FOUND" }]);
+
+    // Ensure raw text is never exposed in full outside of verified quotes
+    expect(json.pages[0]).not.toHaveProperty("text");
   });
 
-  it("never includes resolved IP address in BLOCKED_PRIVATE_ADDRESS responses", async () => {
+  it("never includes resolved IP address in BLOCKED_PRIVATE_ADDRESS responses and returns empty evidence", async () => {
     const mockBlockedCollect = vi.fn().mockResolvedValue({
       status: "unscorable",
       failureCode: "BLOCKED_PRIVATE_ADDRESS",
@@ -121,9 +134,14 @@ describe("handleAnalyze", () => {
     });
 
     expect(res.status).toBe(200);
-    const bodyText = await res.text();
-    // Confirm structured summary
-    expect(bodyText).toContain('"BLOCKED_PRIVATE_ADDRESS"');
+    const json = await res.json();
+    expect(json.status).toBe("unscorable");
+    expect(json.failureCode).toBe("BLOCKED_PRIVATE_ADDRESS");
+    expect(json.evidence).toEqual([]);
+    expect(json.redFlags).toEqual([]);
+    expect(json.score).toBeUndefined();
+
+    const bodyText = JSON.stringify(json);
     // Ensure resolved IP address (127.0.0.1, 10.x, etc.) is not leaked
     expect(bodyText).not.toContain("127.0.0.1");
     expect(bodyText).not.toContain("192.168.");

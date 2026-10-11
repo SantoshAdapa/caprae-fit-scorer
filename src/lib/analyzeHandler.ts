@@ -2,17 +2,21 @@
  * Handler for the /api/analyze endpoint.
  *
  * Enforces rate limiting by IP, strict Zod body validation, domain normalization,
- * optional demonstration allowlist restriction, and safe page collection.
+ * optional demonstration allowlist restriction, safe page collection,
+ * rule-based evidence extraction, and deterministic scoring.
  *
- * NOTE: Responses return summary metrics only. Raw page text, internal error details,
- * and resolved IP addresses are NEVER included in response payloads.
+ * NOTE: Responses return summary metrics, extracted quotes, and scores only.
+ * Full raw page text, internal error details, and resolved IP addresses are NEVER returned.
  */
 
 import { z } from "zod";
-import type { FetchSummary } from "./api-types";
+import type { AnalyzeResponse } from "./api-types";
 import { collectPages as defaultCollectPages } from "./collect";
 import { normalizeDomain } from "./domain";
 import { createRateLimiter, RateLimiter } from "./rateLimit";
+import { DEFAULT_PROFILE } from "./profile";
+import { extractEvidence } from "./evidence/rules";
+import { scoreCompany } from "./score";
 import defaultAllowedDomains from "../data/allowed-domains.json";
 
 // Default rate limiter: 60 requests per 10 minutes per IP
@@ -94,10 +98,35 @@ export async function handleAnalyze(
     const collectFn = deps?.collectPages ?? defaultCollectPages;
     const result = await collectFn(cleanDomain);
 
-    const summary: FetchSummary = {
+    if (result.status === "unscorable") {
+      const unscorableResponse: AnalyzeResponse = {
+        domain: cleanDomain,
+        status: "unscorable",
+        failureCode: result.failureCode,
+        mode: "rules",
+        profileLabel: DEFAULT_PROFILE.label,
+        evidence: [],
+        redFlags: [],
+        score: undefined,
+        pages: [],
+        skipped: [],
+      };
+      return Response.json(unscorableResponse, { status: 200 });
+    }
+
+    // ── 6. Evidence Extraction & Scoring ──────────────────────────────
+    const { evidence, redFlags } = extractEvidence(result.pages, DEFAULT_PROFILE);
+    const score = scoreCompany(evidence, DEFAULT_PROFILE);
+
+    const response: AnalyzeResponse = {
       domain: cleanDomain,
-      status: result.status,
+      status: "ok",
       failureCode: result.failureCode,
+      mode: "rules",
+      profileLabel: DEFAULT_PROFILE.label,
+      evidence,
+      redFlags,
+      score,
       pages: result.pages.map((p) => ({
         type: p.type,
         url: p.url,
@@ -109,7 +138,7 @@ export async function handleAnalyze(
       })),
     };
 
-    return Response.json(summary, { status: 200 });
+    return Response.json(response, { status: 200 });
   } catch {
     // Unexpected failures return generic error without echoing input or stack traces
     return Response.json({ error: "INTERNAL_ERROR" }, { status: 500 });

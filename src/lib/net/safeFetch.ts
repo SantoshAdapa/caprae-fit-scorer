@@ -6,6 +6,7 @@
  */
 
 import net from "node:net";
+import zlib from "node:zlib";
 import dnsPromises from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
 import { request, Agent } from "undici";
@@ -258,6 +259,7 @@ export async function safeFetch(
         signal: AbortSignal.timeout(timeoutMs),
         headers: {
           "user-agent": DEFAULT_USER_AGENT,
+          "accept-encoding": "gzip, deflate, br",
         },
       });
 
@@ -326,7 +328,34 @@ export async function safeFetch(
         chunks.push(buf);
       }
 
-      const bodyText = Buffer.concat(chunks).toString("utf-8");
+      let rawBuffer = Buffer.concat(chunks);
+      const contentEncoding = (
+        (res.headers["content-encoding"] as string) || ""
+      ).toLowerCase();
+
+      if (contentEncoding) {
+        try {
+          if (contentEncoding.includes("br")) {
+            rawBuffer = zlib.brotliDecompressSync(rawBuffer);
+          } else if (contentEncoding.includes("gzip")) {
+            rawBuffer = zlib.gunzipSync(rawBuffer);
+          } else if (contentEncoding.includes("deflate")) {
+            try {
+              rawBuffer = zlib.inflateSync(rawBuffer);
+            } catch {
+              rawBuffer = zlib.inflateRawSync(rawBuffer);
+            }
+          }
+        } catch {
+          return {
+            ok: false,
+            code: "HTTP_ERROR",
+            detail: `Failed to decompress ${contentEncoding} payload`,
+          };
+        }
+      }
+
+      const bodyText = rawBuffer.toString("utf-8");
 
       return {
         ok: true,

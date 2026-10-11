@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
+import zlib from "node:zlib";
 import { AddressInfo } from "node:net";
 import { safeFetch } from "./safeFetch";
 import { isAddressAllowed } from "./ip";
@@ -18,6 +19,14 @@ describe("safeFetch", () => {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.writeHead(200);
         res.end("<html><body>Hello World</body></html>");
+        return;
+      }
+
+      if (url.pathname === "/gzip") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Encoding", "gzip");
+        res.writeHead(200);
+        res.end(zlib.gzipSync("<html><body>Hello Compressed World</body></html>"));
         return;
       }
 
@@ -104,6 +113,20 @@ describe("safeFetch", () => {
       expect(res.body).toContain("Hello World");
       expect(res.contentType).toContain("text/html");
       expect(res.redirects).toBe(0);
+    }
+  });
+
+  it("transparently decompresses gzip encoded responses", async () => {
+    const res = await safeFetch(`http://ok.test:${serverPort}/gzip`, undefined, {
+      allowedPorts: [serverPort],
+      isAddressAllowed: () => true,
+      resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.status).toBe(200);
+      expect(res.body).toContain("Hello Compressed World");
     }
   });
 
