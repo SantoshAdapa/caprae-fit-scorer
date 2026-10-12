@@ -30,6 +30,39 @@ describe("safeFetch", () => {
         return;
       }
 
+      if (url.pathname === "/brotli") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Encoding", "br");
+        res.writeHead(200);
+        res.end(zlib.brotliCompressSync(Buffer.from("<html><body>Hello Brotli World</body></html>")));
+        return;
+      }
+
+      if (url.pathname === "/gzip-bomb") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Encoding", "gzip");
+        res.writeHead(200);
+        const zeroBytes = Buffer.alloc(50 * 1024 * 1024, 0);
+        res.end(zlib.gzipSync(zeroBytes));
+        return;
+      }
+
+      if (url.pathname === "/corrupt-gzip") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Encoding", "gzip");
+        res.writeHead(200);
+        res.end(Buffer.from("corrupt-invalid-gzip-content"));
+        return;
+      }
+
+      if (url.pathname === "/zstd") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Encoding", "zstd");
+        res.writeHead(200);
+        res.end(Buffer.from("<html><body>Zstd data</body></html>"));
+        return;
+      }
+
       if (url.pathname === "/redirect-ip") {
         res.writeHead(302, { Location: "http://169.254.169.254/" });
         res.end();
@@ -272,6 +305,75 @@ describe("safeFetch", () => {
         if (!res.ok) {
           expect(res.code).toBe("BLOCKED_PRIVATE_ADDRESS");
         }
+      }
+    });
+  });
+
+  describe("decompression and decompression bomb protection", () => {
+    it("(a) a normal gzip HTML response is decoded to readable text", async () => {
+      const res = await safeFetch(`http://ok.test:${serverPort}/gzip`, undefined, {
+        allowedPorts: [serverPort],
+        isAddressAllowed: () => true,
+        resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+      });
+
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.status).toBe(200);
+        expect(res.body).toContain("Hello Compressed World");
+      }
+    });
+
+    it("(b) a brotli response is decoded", async () => {
+      const res = await safeFetch(`http://ok.test:${serverPort}/brotli`, undefined, {
+        allowedPorts: [serverPort],
+        isAddressAllowed: () => true,
+        resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+      });
+
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.status).toBe(200);
+        expect(res.body).toContain("Hello Brotli World");
+      }
+    });
+
+    it("(c) a gzip bomb (about 50 MB of zero bytes, under 100 KB on the wire) returns TOO_LARGE", async () => {
+      const res = await safeFetch(`http://ok.test:${serverPort}/gzip-bomb`, undefined, {
+        allowedPorts: [serverPort],
+        isAddressAllowed: () => true,
+        resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe("TOO_LARGE");
+      }
+    });
+
+    it("(d) corrupt gzip returns HTTP_ERROR", async () => {
+      const res = await safeFetch(`http://ok.test:${serverPort}/corrupt-gzip`, undefined, {
+        allowedPorts: [serverPort],
+        isAddressAllowed: () => true,
+        resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe("HTTP_ERROR");
+      }
+    });
+
+    it("(e) content-encoding zstd returns HTTP_ERROR", async () => {
+      const res = await safeFetch(`http://ok.test:${serverPort}/zstd`, undefined, {
+        allowedPorts: [serverPort],
+        isAddressAllowed: () => true,
+        resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe("HTTP_ERROR");
       }
     });
   });

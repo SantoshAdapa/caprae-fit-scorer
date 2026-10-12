@@ -329,24 +329,60 @@ export async function safeFetch(
       }
 
       let rawBuffer = Buffer.concat(chunks);
-      const contentEncoding = (
-        (res.headers["content-encoding"] as string) || ""
-      ).toLowerCase();
+      const rawCe = res.headers["content-encoding"];
+      const ceString = Array.isArray(rawCe)
+        ? rawCe.join(", ")
+        : (rawCe as string) || "";
+      const contentEncoding = ceString.trim().toLowerCase();
+      const decompressedLimit = maxBytes * 5;
 
-      if (contentEncoding) {
+      if (contentEncoding && contentEncoding !== "identity") {
         try {
-          if (contentEncoding.includes("br")) {
-            rawBuffer = zlib.brotliDecompressSync(rawBuffer);
-          } else if (contentEncoding.includes("gzip")) {
-            rawBuffer = zlib.gunzipSync(rawBuffer);
-          } else if (contentEncoding.includes("deflate")) {
+          if (contentEncoding === "br") {
+            rawBuffer = zlib.brotliDecompressSync(rawBuffer, {
+              maxOutputLength: decompressedLimit,
+            });
+          } else if (contentEncoding === "gzip" || contentEncoding === "x-gzip") {
+            rawBuffer = zlib.gunzipSync(rawBuffer, {
+              maxOutputLength: decompressedLimit,
+            });
+          } else if (contentEncoding === "deflate") {
             try {
-              rawBuffer = zlib.inflateSync(rawBuffer);
-            } catch {
-              rawBuffer = zlib.inflateRawSync(rawBuffer);
+              rawBuffer = zlib.inflateSync(rawBuffer, {
+                maxOutputLength: decompressedLimit,
+              });
+            } catch (inflateErr: unknown) {
+              const errCode = (inflateErr as { code?: string })?.code;
+              if (
+                inflateErr instanceof RangeError ||
+                errCode === "ERR_BUFFER_TOO_LARGE"
+              ) {
+                return {
+                  ok: false,
+                  code: "TOO_LARGE",
+                  detail: `Decompressed response exceeded limit of ${decompressedLimit} bytes`,
+                };
+              }
+              rawBuffer = zlib.inflateRawSync(rawBuffer, {
+                maxOutputLength: decompressedLimit,
+              });
             }
+          } else {
+            return {
+              ok: false,
+              code: "HTTP_ERROR",
+              detail: `Unsupported Content-Encoding "${contentEncoding}"`,
+            };
           }
-        } catch {
+        } catch (err: unknown) {
+          const errCode = (err as { code?: string })?.code;
+          if (err instanceof RangeError || errCode === "ERR_BUFFER_TOO_LARGE") {
+            return {
+              ok: false,
+              code: "TOO_LARGE",
+              detail: `Decompressed response exceeded limit of ${decompressedLimit} bytes`,
+            };
+          }
           return {
             ok: false,
             code: "HTTP_ERROR",
