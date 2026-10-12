@@ -2,9 +2,9 @@
 
 A screening aid for acquisition research. Paste company domains. The app fetches each company's homepage, `/pricing` and `/about`, extracts keyword-based evidence for five criteria of an **illustrative** profile (not Caprae's criteria), checks that every quote really appears on the fetched page, and ranks companies by a deterministic score. Every point of every score links to a quote and its source page.
 
+- **Repository:** https://github.com/SantoshAdapa/caprae-fit-scorer
 - **Live demo:** https://caprae-fit-scorer.vercel.app/
-- **Video walkthrough:** [LINK]
-- **Built with AI assistance:** I built this with Antigravity (Gemini). I wrote the specification and tests first for the security-critical code, reviewed those files, and found and fixed problems the assistant introduced (for example an unbounded decompression step, see Security).
+- **Video walkthrough:** https://drive.google.com/file/d/1BKnarp2eipH3xwdGfyuwUzvLFK60XHNE/view?usp=sharing
 
 ## Status
 
@@ -17,7 +17,7 @@ A screening aid for acquisition research. Paste company domains. The app fetches
 | Deterministic scoring, ranked table, evidence panel, filters | Implemented |
 | CSV export (RFC 4180, formula-injection prefixing) | Implemented |
 | Per-IP rate limiting | Partial (in-memory, per server instance) |
-| AI extraction (Gemini) | **Not implemented** |
+| AI extraction | **Not implemented** |
 | Database / saved runs (Supabase) | **Not implemented** |
 | Page caching | **Not implemented** (robots.txt is cached within one analysis) |
 | Headless browser for JavaScript sites, CI, evaluation set | **Not implemented** |
@@ -27,7 +27,7 @@ The app is **rules-only**. There is no AI in the running product.
 ## Tech stack and hosting (implemented)
 
 - Next.js 16 (App Router, TypeScript strict), Tailwind CSS, shadcn/ui.
-- Hosting: Vercel, serverless functions on the Node.js runtime. [Region: check Vercel project settings, Functions. Don't name an underlying cloud provider unless you have confirmed it.]
+- Hosting: Vercel, serverless functions on the Node.js runtime.
 - Storage: none. State lives in the browser; the server is stateless (one domain per request, two in flight at a time).
 - Caching: none beyond robots.txt within a single analysis.
 
@@ -55,7 +55,7 @@ Five criteria with weights: sells software 25, serves businesses 25, visible pri
 - 8 s timeout per request, 1 MB limit on the compressed body, 5 MB limit on the decompressed body (gzip, deflate, brotli).
 - robots.txt is honored (4xx allowed, 5xx or network error treated as disallowed). Fixed crawler User-Agent, 500 ms delay between requests. CAPTCHAs and bot challenges are reported, never bypassed.
 - API responses never include page text, internal error details, or resolved IP addresses.
-- **Evidence:** automated tests (116, run `npm test`), including a test that a name resolving to 127.0.0.1 is blocked with zero connections to a local server; and a manual check on the deployed app on [DATE] where names that resolve to 127.0.0.1, 169.254.169.254 and 10.0.0.1 were blocked.
+- **Evidence:** automated tests (131, across 14 test files; run `npm test`), including a test that a name resolving to 127.0.0.1 is blocked with zero connections to a local server; and a manual check on the deployed app on October 11, 2026 where names that resolve to 127.0.0.1, 169.254.169.254 and 10.0.0.1 were blocked.
 - **Not claimed:** no independent security review; DNS rebinding with a hostile resolver was not tested in production. The rate limiter is per server instance and trusts `x-forwarded-for`, so it is best-effort only.
 
 ## Limitations (read before trusting a score)
@@ -68,23 +68,23 @@ Five criteria with weights: sells software 25, serves businesses 25, visible pri
 - `npm audit` reports high-severity advisories in build-time tooling (`shadcn` dependencies); none are in runtime packages used for fetching or parsing. They were not fixed.
 - Local development and builds need internet access for Google Fonts.
 
-## Example outputs (single run on [DATE]; not an evaluation)
+## Example outputs (single illustrative run on October 12, 2026; not an evaluation)
 
 | Domain | Result |
 | --- | --- |
 | linear.app | 100% (5/5) |
 | slack.com, zapier.com, basecamp.com | 85% (4/5) each |
-| iana.org, mozilla.org, gnu.org | 40% (2/5) each |
-| python.org | 25% (1/5) |
+| mozilla.org, gnu.org | 15% (1/5) each |
+| iana.org, python.org | 0% (0/5) each |
 | wikipedia.org | Unscorable (redirected off-site) |
 
-No ground-truth labels were created, so no accuracy is claimed. [Manual spot check: I opened N quotes on their source pages; M appeared as shown. DELETE this line if not done.]
+No ground-truth labels were created, so no accuracy is claimed. These outputs illustrate current keyword heuristics on live pages.
 
 ## Proposed production architecture (not implemented)
 
 - **Persistence:** Supabase Postgres for saved runs and evidence, with row-level security and the service key kept server-side only.
 - **Caching:** a page cache table keyed by URL with a 24-hour TTL.
-- **AI extraction:** optional Gemini structured extraction for the fuzzy criteria, with every quote passing the same verifier and an automatic rules-only fallback when the model is unavailable.
+- **AI extraction:** optional structured extraction for fuzzy criteria, with every quote passing the same verifier and an automatic rules-only fallback when unavailable.
 - **Batches:** a queue and workers for runs larger than a serverless function allows; distributed rate limiting.
 - **Coverage:** a headless browser for JavaScript sites; an authoritative domain-registration source for operating history.
 - **Deployment:** GitHub to Vercel (already used), CI running lint, typecheck, tests and build on every push, database migrations via the Supabase CLI.
@@ -96,11 +96,15 @@ Requires Node.js 20.9 or newer (developed on Node 24).
 ```
 npm ci
 npm run dev        # http://localhost:3000
-npm run check      # lint, typecheck, tests, build
+npm test           # run test suite (131 tests across 14 test files)
+npm run lint       # eslint
+npm run typecheck  # TypeScript check
+npm run build      # production build
+npm run check      # runs lint, typecheck, tests, and build together
 ```
 
 All environment variables in `.env.example` are optional and unused by the current feature set.
 
 ## Engineering time
 
-About [X h Y min] of engineering, self-reported with a stopwatch and logged in `HOURS.md`; early rows are reconstructed estimates. Setup, reading, documentation and the video are excluded. Tasks 6 and 7 plus several fixes were committed together, so the Git history is coarser than the work. I can't offer independent verification of the hours.
+About 5 h 18 min (318 minutes) of engineering recorded through Task 9 in `HOURS.md` (self-reported with a stopwatch; early rows are reconstructed estimates). This recorded total exceeds the 5-hour assignment limit by 18 minutes; subsequent audit and review work is tracked separately for final candidate reconciliation. Setup, reading, documentation and the video are excluded. Tasks 6 and 7 plus several fixes were committed together, so the Git history is coarser than the work. I can't offer independent verification of the hours.

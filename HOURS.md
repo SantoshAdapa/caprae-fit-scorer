@@ -1,27 +1,28 @@
-# Engineering hours
+# Engineering Hours
 
-Engineering time only: coding, debugging, testing, deploying, working with
-Antigravity at the desk, and reviewing generated code. Excludes machine
-setup, account creation, reading, domain labeling, writing the README
-text/essays, and recording the video. From Task 2 onward, times come from a
-stopwatch (paused for breaks) and are rounded to the nearest minute.
-Rows marked "reconstructed" are estimates: no stopwatch was running.
-Rows first logged in 5-minute rounded-up increments were corrected to exact
-minutes on 2026-10-11.
+Engineering time includes coding, debugging, testing, deploying, and reviewing code. It excludes machine setup, account creation, reading, domain labeling, writing README text and essays, and recording the video.
 
-| Date | Start | End | Breaks (min) | Net (min) | Running total (min) | What was done |
-|------|-------|-----|--------------|-----------|---------------------|---------------|
-| 2026-10-09 | n/a | n/a | n/a | 40 | 40 | Task 1: scaffold and first dependency fix round (reconstructed estimate) |
-| 2026-10-10 | n/a | n/a | n/a | 25 | 65 | Task 1b: cn, config and font fix rounds (reconstructed from terminal timestamps, approximate) |
-| 2026-10-10 | n/a | n/a | 0 | 3 | 68 | Task 1c: commit and push (stopwatch: 3 min 4 s) |
-| 2026-10-10 | n/a | n/a | 0 | 8 | 76 | Task 2: types, profile, domain normalization (stopwatch: 8 min 11 s) |
-| 2026-10-10 | n/a | n/a | 0 | 4 | 80 | Task 3: early Vercel deploy and incognito check (stopwatch: 4 min) |
-| 2026-10-11 | n/a | n/a | 0 | 28 | 108 | Task 4: safe fetching, robots.txt, page collection (stopwatch: 28 min 25 s) |
-| 2026-10-11 | n/a | n/a | 0 | 90 | 198 | Task 5: analyze API, fetch-results UI, deployment error and fix, production verification (stopwatch: about 1 h 30) |
-| 2026-10-11 | n/a | n/a | 0 | 45 | 243 | Task 6: evidence extraction, quote verification, scoring engine, evidence panel UI (stopwatch: 45 min) |
-| 2026-10-11 | n/a | n/a | n/a | 40 | 283 | Task 6b-7: score-display and gzip-decoding fixes, CSV export, filters, limitations panel (reconstructed: check timestamps 22:23 to 23:05 = 42 min elapsed) |
-| 2026-10-11 | n/a | n/a | n/a | 8 | 291 | Task 7b: sample loaders, final check, commit after 23:05 (reconstructed; README writing excluded) |
-| 2026-10-12 | n/a | n/a | 0 | 18 | 309 | Task 8: decompression-bomb fix with tests (stopwatch: 18 min) |
+Times from Task 2 onward were measured with a stopwatch, paused for breaks, and rounded to the nearest minute. Rows marked **Reconstructed estimate** are estimates because no stopwatch was running. Earlier estimates were reconstructed from available terminal timestamps where possible.
+
+| Date | Net (min) | Running total (min) | Task | Timing basis |
+|---|---:|---:|---|---|
+| 2026-10-09 | 40 | 40 | Task 1: Scaffold and initial dependency fixes | Reconstructed estimate |
+| 2026-10-10 | 25 | 65 | Task 1b: `cn`, configuration, and font fixes | Reconstructed estimate from terminal timestamps |
+| 2026-10-10 | 3 | 68 | Task 1c: Commit and push | Stopwatch: 3 min 4 sec |
+| 2026-10-10 | 8 | 76 | Task 2: Types, profile, and domain normalization | Stopwatch: 8 min 11 sec |
+| 2026-10-10 | 4 | 80 | Task 3: Initial Vercel deployment and incognito check | Stopwatch: 4 min |
+| 2026-10-11 | 28 | 108 | Task 4: Safe fetching, `robots.txt`, and page collection | Stopwatch: 28 min 25 sec |
+| 2026-10-11 | 90 | 198 | Task 5: Analysis API, results UI, deployment error and fix, and production verification | Stopwatch: Approximately 1 h 30 min |
+| 2026-10-11 | 45 | 243 | Task 6: Evidence extraction, quote verification, scoring engine, and evidence panel UI | Stopwatch: 45 min |
+| 2026-10-11 | 40 | 283 | Tasks 6b–7: Score-display and gzip-decoding fixes, CSV export, filters, and limitations panel | Reconstructed estimate; terminal timestamps span approximately 42 minutes |
+| 2026-10-11 | 8 | 291 | Task 7b: Sample loaders, final check, and commit | Reconstructed estimate |
+| 2026-10-12 | 18 | 309 | Task 8: Decompression-bomb fix and tests | Stopwatch: 18 min |
+| 2026-10-12 | 9 | 318 | Task 9: Production smoke test and push | Stopwatch: 9 min |
 
 ## Total
-Net engineering time so far: 4 h 5 min (limit: 5 h)
+
+**Net engineering time: 5 h 18 min (318 minutes)**
+
+**Assignment limit: 5 h (300 minutes)**
+
+The total includes all recorded engineering work. Reconstructed durations are estimates and are identified separately from stopwatch measurements. The logged engineering total exceeds the 5-hour limit by 18 minutes.

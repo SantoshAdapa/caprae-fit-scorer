@@ -94,7 +94,7 @@ function buildQuoteWindow(
 /**
  * Evaluates pattern matching for a specific criterion on a single page's text.
  */
-function findCriterionMatch(
+export function findCriterionMatch(
   id: CriterionId,
   text: string,
   now: Date
@@ -102,7 +102,7 @@ function findCriterionMatch(
   switch (id) {
     case "sells_software": {
       const regex =
-        /\b(software|saas|platform|dashboard|web app|sign up|free trial|request a demo)\b/i;
+        /\b(saas|software (?:platform|product|solution|suite|application|service|tool)|(?:enterprise|b2b|cloud|workflow|analytics|collaboration|management|developer)\s+(?:[\w-]+\s+)?software|project management software|web app(?:lication)?|(?:software|cloud|saas|developer|automation|analytics|data|enterprise|b2b|workflow|project\s+management|management|collaboration|productivity|integration|agent|ai)\s+platform|platform\s+(?:for\s+(?:teams|businesses|enterprises|companies|developers|work)|(?:provides|powers|helps|enables)\s+(?:[\w-]+\s+)*(?:software|solutions?|tools?|teams|businesses|enterprises|developers|workflows?))|(?:software|web|analytics|reporting|admin|management|metrics|app|team)\s+dashboard|dashboard\s+for\s+(?:teams|businesses|enterprises|companies)|free trial|try\s+(?:[\w-]+\s+)?(?:for\s+)?free|(?:request|book|schedule|watch|see)\s+(?:a\s+)?demo)\b/i;
       const m = regex.exec(text);
       return m ? { start: m.index, end: m.index + m[0].length } : null;
     }
@@ -115,15 +115,60 @@ function findCriterionMatch(
     }
 
     case "visible_pricing": {
-      // Must be a currency amount; the word "pricing" alone is NOT enough
-      const regex = /(?:[$€£₹]|(?:USD|EUR|GBP|INR)\s*)\d+(?:[.,]\d+)?/i;
-      const m = regex.exec(text);
-      return m ? { start: m.index, end: m.index + m[0].length } : null;
+      // Must be a currency amount; exclude donation tiers and charitable grants
+      const regex = /(?:[$€£₹]|(?:USD|EUR|GBP|INR)\s*)\d+(?:[.,]\d+)?/gi;
+      let m: RegExpExecArray | null;
+
+      const donationKeywords =
+        "donate|donation|donations|donor|donors|contribute|contribution|contributions|grant|grants|gift|gifts|fundraising|tax-deductible|charit(?:y|able)";
+
+      // Direct donation prefix: e.g. "donate ", "suggested donation of ", "gift: "
+      const directDonationRegex = new RegExp(
+        `\\b(?:${donationKeywords})\\b(?:\\s+(?:of|at|to|min(?:imum)?|suggested))?\\s*[:\\-]?\\s*$`,
+        "i"
+      );
+
+      // Donation tier list continuation: e.g. "donate $25 or ", "gift of $10, $25, or "
+      const donationListRegex = new RegExp(
+        `\\b(?:${donationKeywords})\\b(?:\\s+(?:of|at|to|min(?:imum)?|suggested))?\\s*[:\\-]?(?:\\s*[$€£₹]?\\d+[\\d.,]*\\s*(?:,\\s*|\\s+(?:or|and)\\s*|\\s*\\/\\s*))+\\s*$`,
+        "i"
+      );
+
+      // Donation suffix: e.g. " grant", " donation", " or $50 donation", " gift"
+      const donationSuffixRegex = new RegExp(
+        `^\\s*(?:(?:or|and|,)\\s*[$€£₹]?\\d+[\\d.,]*\\s*)*(?:${donationKeywords})\\b`,
+        "i"
+      );
+
+      while ((m = regex.exec(text)) !== null) {
+        const matchStart = m.index;
+        const matchEnd = m.index + m[0].length;
+
+        // Check local clause before the currency amount (up to 80 chars, bounded by sentence punctuation)
+        const rawPrefix = text.slice(Math.max(0, matchStart - 80), matchStart);
+        const prefixClause = rawPrefix.split(/[.!?\n;]/).pop() || "";
+
+        // Check local clause after the currency amount (up to 80 chars, bounded by sentence punctuation)
+        const rawSuffix = text.slice(matchEnd, Math.min(text.length, matchEnd + 80));
+        const suffixClause = rawSuffix.split(/[.!?\n;]/)[0] || "";
+
+        const hasDonationPrefix =
+          directDonationRegex.test(prefixClause) || donationListRegex.test(prefixClause);
+
+        const hasDonationSuffix = donationSuffixRegex.test(suffixClause);
+
+        if (hasDonationPrefix || hasDonationSuffix) {
+          continue;
+        }
+
+        return { start: matchStart, end: matchEnd };
+      }
+      return null;
     }
 
     case "recurring_model": {
       const regex =
-        /(?:\b(per month|per year|monthly|annually|per user|per seat|subscription)\b|\/(?:mo|month|yr)\b)/i;
+        /(?:\b(per (?:month|year)|billed (?:monthly|annually|yearly)|(?:monthly|annual|yearly) (?:subscription|plan|billing|fee)|subscription (?:plan|fee|pricing|model)|recurring (?:billing|subscription|fee)|cancel anytime)\b|\/(?:mo|month|yr|year)\b|(?:[$€£₹]|(?:USD|EUR|GBP|INR)\s*)\d+(?:[.,]\d+)?\s*(?:\/(?:mo|month|yr|year)|per (?:month|year)|(?:monthly|annually|yearly))\b)/i;
       const m = regex.exec(text);
       return m ? { start: m.index, end: m.index + m[0].length } : null;
     }

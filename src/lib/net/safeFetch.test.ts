@@ -38,6 +38,14 @@ describe("safeFetch", () => {
         return;
       }
 
+      if (url.pathname === "/deflate") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Encoding", "deflate");
+        res.writeHead(200);
+        res.end(zlib.deflateSync(Buffer.from("<html><body>Hello Deflate World</body></html>")));
+        return;
+      }
+
       if (url.pathname === "/gzip-bomb") {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.setHeader("Content-Encoding", "gzip");
@@ -307,6 +315,15 @@ describe("safeFetch", () => {
         }
       }
     });
+
+    it("(d) rejects non-80/443 ports with default allowedPorts", async () => {
+      const res = await safeFetch("http://ok.test:8080/normal");
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.code).toBe("BLOCKED_PRIVATE_ADDRESS");
+        expect(res.detail).toContain("8080 not allowed");
+      }
+    });
   });
 
   describe("decompression and decompression bomb protection", () => {
@@ -374,6 +391,20 @@ describe("safeFetch", () => {
       expect(res.ok).toBe(false);
       if (!res.ok) {
         expect(res.code).toBe("HTTP_ERROR");
+      }
+    });
+
+    it("(f) a deflate response is decoded", async () => {
+      const res = await safeFetch(`http://ok.test:${serverPort}/deflate`, undefined, {
+        allowedPorts: [serverPort],
+        isAddressAllowed: () => true,
+        resolve: async () => [{ address: "127.0.0.1", family: 4 }],
+      });
+
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.status).toBe(200);
+        expect(res.body).toContain("Hello Deflate World");
       }
     });
   });

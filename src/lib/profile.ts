@@ -32,6 +32,6 @@ export const SCORE_LIMITATIONS: string[] = [
   "Illustrative profile, not Caprae's criteria.",
   "Score = share of profile weight with verified evidence. Missing evidence is unknown, not negative.",
   "Evidence comes only from the homepage, /pricing, and /about.",
-  "Rules-only mode is keyword-based and coarse.",
+  "Rules-only mode is keyword-based and coarse: quotes prove text presence, not commercial intent.",
   "This is a screening aid, not an investment recommendation.",
 ];

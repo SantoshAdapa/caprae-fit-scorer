@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractEvidence } from "./rules";
+import { extractEvidence, findCriterionMatch } from "./rules";
 import { DEFAULT_PROFILE } from "../profile";
 import type { CollectedPage } from "../collect";
 
@@ -190,5 +190,267 @@ describe("extractEvidence", () => {
         expect(slice).toBe(ev.quote);
       }
     }
+  });
+
+  describe("false-positive regressions and positive controls", () => {
+    it("rejects non-commercial software mentions (iana.org and python.org examples)", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "home",
+          url: "https://iana.org/",
+          text: "Protocols must use codes that have the same interpretation by every software implementation across networks.",
+        },
+        {
+          type: "about",
+          url: "https://python.org/psf",
+          text: "The Python Software Foundation is an independent non-profit corporation.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      const sellsSoftware = result.evidence.find((e) => e.criterionId === "sells_software");
+      expect(sellsSoftware?.status).toBe("unknown");
+      expect(sellsSoftware?.verified).toBe(false);
+    });
+
+    it("rejects generic newsletter sign-up text from matching sells_software", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "home",
+          url: "https://blog.test/",
+          text: "Sign up for our newsletter to receive weekly productivity tips and updates.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      const sellsSoftware = result.evidence.find((e) => e.criterionId === "sells_software");
+      expect(sellsSoftware?.status).toBe("unknown");
+    });
+
+    it("rejects operational report cadences from matching recurring_model (iana.org example)", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "home",
+          url: "https://iana.org/performance",
+          text: "We review operational performance commitments at a glance and in monthly reports.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      const recurring = result.evidence.find((e) => e.criterionId === "recurring_model");
+      expect(recurring?.status).toBe("unknown");
+    });
+
+    it("rejects one-time per-user and per-seat pricing without recurring context from matching recurring_model", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "pricing",
+          url: "https://onetime.test/pricing",
+          text: "One-time perpetual license: $499 per user flat fee, or $2,500 per seat with no recurring charges.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      const recurring = result.evidence.find((e) => e.criterionId === "recurring_model");
+      expect(recurring?.status).toBe("unknown");
+      expect(recurring?.verified).toBe(false);
+    });
+
+    it("matches positive controls for explicit recurring cadences (per month, /mo, billed annually)", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "pricing",
+          url: "https://recurring.test/pricing",
+          text: "Starter plan is $12/mo per seat or $10 per user per month billed annually. Cancel anytime.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      const recurring = result.evidence.find((e) => e.criterionId === "recurring_model");
+      expect(recurring?.status).toBe("met");
+      expect(recurring?.verified).toBe(true);
+      expect(recurring?.quote).toBeDefined();
+    });
+
+    it("rejects donation amounts and foundation grants from matching visible_pricing", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "home",
+          url: "https://nonprofit.test/",
+          text: "Please support our mission: donate $25 or $50 today. All gifts are tax-deductible.",
+        },
+        {
+          type: "about",
+          url: "https://nonprofit.test/about",
+          text: "In 2024, our research team received a $100,000 grant from philanthropic partners.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      const pricing = result.evidence.find((e) => e.criterionId === "visible_pricing");
+      expect(pricing?.status).toBe("unknown");
+    });
+
+    it("preserves legitimate product pricing even when donation text is within 50 characters", () => {
+      // Proximity test: 'donation' is only 23 characters away from '$49'
+      const proximatePages: CollectedPage[] = [
+        {
+          type: "pricing",
+          url: "https://saas-community.test/pricing",
+          text: "Support our open-source tools with a donation. Pro plan is $49 per month for teams.",
+        },
+      ];
+
+      const result = extractEvidence(proximatePages, DEFAULT_PROFILE, fixedNow);
+      const pricing = result.evidence.find((e) => e.criterionId === "visible_pricing");
+      expect(pricing?.status).toBe("met");
+      expect(pricing?.verified).toBe(true);
+      expect(pricing?.quote).toContain("$49");
+    });
+
+    it("rejects donation amount in mixed clause and selects only the commercial price by character offset", () => {
+      const mixedText =
+        "Donate $25 to the foundation or buy our commercial software license for $99.";
+
+      // 1. Direct offset assertion: proves $25 was rejected and $99 was selected
+      const match = findCriterionMatch("visible_pricing", mixedText, fixedNow);
+      expect(match).not.toBeNull();
+      expect(match?.start).toBe(mixedText.indexOf("$99"));
+      expect(match?.end).toBe(mixedText.indexOf("$99") + 3);
+      expect(mixedText.slice(match!.start, match!.end)).toBe("$99");
+      expect(match?.start).not.toBe(mixedText.indexOf("$25"));
+
+      // 2. Integration via extractEvidence: quote verification and page slice integrity
+      const mixedPages: CollectedPage[] = [
+        {
+          type: "pricing",
+          url: "https://dual-model.test/pricing",
+          text: mixedText,
+        },
+      ];
+
+      const result = extractEvidence(mixedPages, DEFAULT_PROFILE, fixedNow);
+      const pricing = result.evidence.find((e) => e.criterionId === "visible_pricing");
+      expect(pricing?.status).toBe("met");
+      expect(pricing?.verified).toBe(true);
+      expect(pricing?.charStart).toBeDefined();
+      expect(pricing?.charEnd).toBeDefined();
+      expect(mixedText.slice(pricing!.charStart!, pricing!.charEnd!)).toBe(pricing!.quote);
+      expect(pricing?.quote).toContain("$99");
+    });
+
+    it("isolates commercial price quote without donation amount when separated by text", () => {
+      const separatedText =
+        "Please donate $25 to support our open-source community foundation and research initiatives. " +
+        "We provide educational materials to public schools across the country. " +
+        "For commercial enterprise deployment, our software license is $99 per seat.";
+
+      // 1. Direct offset assertion on separated text
+      const match = findCriterionMatch("visible_pricing", separatedText, fixedNow);
+      expect(match).not.toBeNull();
+      expect(match?.start).toBe(separatedText.indexOf("$99"));
+      expect(match?.end).toBe(separatedText.indexOf("$99") + 3);
+      expect(separatedText.slice(match!.start, match!.end)).toBe("$99");
+      expect(match?.start).not.toBe(separatedText.indexOf("$25"));
+
+      // 2. Integration via extractEvidence: quote isolates $99 without $25
+      const separatedPages: CollectedPage[] = [
+        {
+          type: "pricing",
+          url: "https://dual-model-separated.test/pricing",
+          text: separatedText,
+        },
+      ];
+
+      const result = extractEvidence(separatedPages, DEFAULT_PROFILE, fixedNow);
+      const pricing = result.evidence.find((e) => e.criterionId === "visible_pricing");
+      expect(pricing?.status).toBe("met");
+      expect(pricing?.verified).toBe(true);
+      expect(pricing?.charStart).toBeDefined();
+      expect(pricing?.charEnd).toBeDefined();
+      expect(separatedText.slice(pricing!.charStart!, pricing!.charEnd!)).toBe(pricing!.quote);
+      expect(pricing?.quote).toContain("$99");
+      expect(pricing?.quote).not.toContain("$25");
+    });
+
+    it("rejects generic and non-commercial mentions of platform and dashboard", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "home",
+          url: "https://civic.test/",
+          text: "Our political platform advocates for clean energy, and passengers on the subway platform must wait behind the line.",
+        },
+        {
+          type: "about",
+          url: "https://civic.test/health",
+          text: "The state health department maintains a public health dashboard, while the vehicle dashboard monitors tire pressure.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      const sellsSoftware = result.evidence.find((e) => e.criterionId === "sells_software");
+      expect(sellsSoftware?.status).toBe("unknown");
+      expect(sellsSoftware?.verified).toBe(false);
+    });
+
+    it("matches positive controls for legitimate SaaS tools using platform or dashboard (Linear, Slack, Zapier, Basecamp)", () => {
+      const testCases = [
+        {
+          name: "Linear",
+          text: "Linear is a developer platform built for high-performance engineering teams.",
+          expected: "developer platform",
+        },
+        {
+          name: "Slack",
+          text: "Slack is an enterprise collaboration platform for teams to work together.",
+          expected: "collaboration platform",
+        },
+        {
+          name: "Zapier",
+          text: "Zapier is a workflow automation platform that connects thousands of work apps.",
+          expected: "automation platform",
+        },
+        {
+          name: "Basecamp",
+          text: "Basecamp is a project management tool with an intuitive team dashboard for businesses.",
+          expected: "team dashboard",
+        },
+      ];
+
+      for (const tc of testCases) {
+        const pages: CollectedPage[] = [
+          {
+            type: "home",
+            url: `https://${tc.name.toLowerCase()}.test/`,
+            text: tc.text,
+          },
+        ];
+        const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+        const sellsSoftware = result.evidence.find((e) => e.criterionId === "sells_software");
+        expect(sellsSoftware?.status, `Failed for ${tc.name}`).toBe("met");
+        expect(sellsSoftware?.verified, `Verification failed for ${tc.name}`).toBe(true);
+        expect(sellsSoftware?.quote, `Quote mismatch for ${tc.name}`).toContain(tc.expected);
+      }
+    });
+
+    it("matches positive controls for legitimate B2B SaaS product, pricing, and billing terms", () => {
+      const pages: CollectedPage[] = [
+        {
+          type: "home",
+          url: "https://saas.test/",
+          text: "Acme is a cloud software platform built for teams. Start your 14-day free trial or request a demo.",
+        },
+        {
+          type: "pricing",
+          url: "https://saas.test/pricing",
+          text: "Transparent pricing: Team plan is $29 per user/month, billed annually or $35 billed monthly.",
+        },
+      ];
+
+      const result = extractEvidence(pages, DEFAULT_PROFILE, fixedNow);
+      expect(result.evidence.find((e) => e.criterionId === "sells_software")?.status).toBe("met");
+      expect(result.evidence.find((e) => e.criterionId === "visible_pricing")?.status).toBe("met");
+      expect(result.evidence.find((e) => e.criterionId === "recurring_model")?.status).toBe("met");
+    });
   });
 });
