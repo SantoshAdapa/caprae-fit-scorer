@@ -19,7 +19,9 @@ minutes on 2026-10-11.
 | 2026-10-11 | n/a | n/a | 0 | 28 | 108 | Task 4: safe fetching, robots.txt, page collection (stopwatch: 28 min 25 s) |
 | 2026-10-11 | n/a | n/a | 0 | 90 | 198 | Task 5: analyze API, fetch-results UI, deployment error and fix, production verification (stopwatch: about 1 h 30) |
 | 2026-10-11 | n/a | n/a | 0 | 45 | 243 | Task 6: evidence extraction, quote verification, scoring engine, evidence panel UI (stopwatch: 45 min) |
-| 2026-10-11 | n/a | n/a | 0 | 2 | 245 | Task 7: CSV export, filters, limitations banner, sample domains (stopwatch: 2 min 19 s) |
+| 2026-10-11 | n/a | n/a | n/a | 40 | 283 | Task 6b-7: score-display and gzip-decoding fixes, CSV export, filters, limitations panel (reconstructed: check timestamps 22:23 to 23:05 = 42 min elapsed) |
+| 2026-10-11 | n/a | n/a | n/a | 8 | 291 | Task 7b: sample loaders, final check, commit after 23:05 (reconstructed; README writing excluded) |
+| 2026-10-12 | n/a | n/a | 0 | 18 | 309 | Task 8: decompression-bomb fix with tests (stopwatch: 18 min) |
 
 ## Total
 Net engineering time so far: 4 h 5 min (limit: 5 h)
