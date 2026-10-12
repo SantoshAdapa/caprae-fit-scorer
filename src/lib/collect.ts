@@ -56,6 +56,11 @@ export function extractText(html: string): string {
   const $ = cheerio.load(html);
   $("script, style, noscript, svg, template, iframe").remove();
 
+  // Insert whitespace after block and boundary elements so adjacent tags don't concatenate words
+  $(
+    "p, div, h1, h2, h3, h4, h5, h6, li, tr, td, th, a, button, section, article, nav, header, footer, br, hr"
+  ).after(" ");
+
   const rawText = $("body").length ? $("body").text() : $.text();
   const collapsed = rawText.replace(/\s+/g, " ").trim();
   return collapsed.slice(0, 100_000);

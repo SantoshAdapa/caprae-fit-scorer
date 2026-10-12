@@ -34,6 +34,12 @@ describe("extractText", () => {
     const text = extractText(longHtml);
     expect(text.length).toBe(100_000);
   });
+
+  it("separates adjacent tags with whitespace instead of merging words", () => {
+    const html = `<body><nav><a href="/p">Product</a><a href="/r">Resources</a></nav><p>First sentence.</p><p>Second sentence.</p></body>`;
+    const text = extractText(html);
+    expect(text).toBe("Product Resources First sentence. Second sentence.");
+  });
 });
 
 describe("collectPages", () => {
